@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basal Ganglia Motor Circuit Simulator</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --box-color: #ffffff;
+            --accent: #2c3e50;
+            --excitatory: #27ae60; /* Green */
+            --inhibitory: #c0392b; /* Red */
+            --dopamine: #2980b9;   /* Blue */
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 { margin: 0; color: var(--accent); }
+        p.subtitle { color: #7f8c8d; }
+
+        /* layout */
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .controls {
+            flex: 1;
+            min-width: 300px;
+            background: var(--box-color);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .visualization {
+            flex: 2;
+            min-width: 500px;
+            background: var(--box-color);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            position: relative;
+            min-height: 500px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Control Elements */
+        .control-group {
+            margin-bottom: 25px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+        
+        label { display: block; font-weight: bold; margin-bottom: 10px; }
+        
+        input[type=range] {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background-color: #ecf0f1;
+            transition: 0.3s;
+            font-weight: 600;
+        }
+
+        button.active { background-color: var(--accent); color: white; }
+        button:hover { opacity: 0.8; }
+
+        .scenario-box {
+            background: #e8f6f3;
+            padding: 15px;
+            border-left: 5px solid var(--dopamine);
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+
+        /* Diagram Elements */
+        .brain-box {
+            width: 120px;
+            padding: 15px;
+            text-align: center;
+            border-radius: 8px;
+            font-weight: bold;
+            color: white;
+            position: absolute;
+            transition: all 0.5s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 2;
+        }
+
+        /* Node Positioning */
+        #cortex { top: 20px; left: 50%; transform: translateX(-50%); background: #95a5a6; }
+        #striatum { top: 150px; left: 50%; transform: translateX(-50%); background: #8e44ad; }
+        #snc { top: 150px; left: 10%; background: var(--dopamine); } /* Substantia Nigra */
+        
+        /* Indirect Route */
+        #gpe { top: 280px; left: 75%; background: #e67e22; }
+        #stn { top: 400px; left: 75%; background: #d35400; }
+        
+        /* Direct Route & Convergence */
+        #gpi { top: 400px; left: 25%; background: #c0392b; width: 140px; } /* GPi / SNr */
+        
+        #thalamus { top: 520px; left: 50%; transform: translateX(-50%); background: #27ae60; }
+
+        /* Arrows (SVG) */
+        svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        path {
+            fill: none;
+            stroke-width: 4;
+            transition: stroke-width 0.5s, opacity 0.5s;
+        }
+
+        .arrow-excitatory { stroke: var(--excitatory); stroke-dasharray: 5,0; }
+        .arrow-inhibitory { stroke: var(--inhibitory); stroke-dasharray: 5,0; }
+        .arrow-modulatory { stroke: var(--dopamine); stroke-dasharray: 5,5; }
+
+        /* Output Meter */
+        .output-meter {
+            margin-top: auto;
+            width: 100%;
+            text-align: center;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        #meter-fill {
+            height: 20px;
+            background: linear-gradient(90deg, blue, green, red);
+            width: 50%;
+            margin: 10px auto;
+            border-radius: 10px;
+            position: relative;
+        }
+        
+        #meter-marker {
+            position: absolute;
+            top: -5px;
+            width: 4px;
+            height: 30px;
+            background: black;
+            left: 50%;
+            transition: left 0.5s ease;
+        }
+
+        .status-text { font-size: 1.2em; font-weight: bold; }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Physiology of Basal Ganglia: Motor Circuit</h1>
+    <p class="subtitle">Direct vs. Indirect Pathways & Pharmacological Interventions</p>
+</header>
+
+<div class="container">
+    <div class="controls">
+        <h3>1. Pathology Presets</h3>
+        <div class="btn-group control-group">
+            <button onclick="setScenario('normal')" id="btn-normal" class="active">Normal</button>
+            <button onclick="setScenario('parkinsons')" id="btn-parkinsons">Parkinson's (Hypokinetic)</button>
+            <button onclick="setScenario('huntingtons')" id="btn-huntingtons">Huntington's (Hyperkinetic)</button>
+        </div>
+
+        <h3>2. Physiology Variables</h3>
+        <div class="control-group">
+            <label for="da-slider">Dopamine (SNc) Output</label>
+            <input type="range" id="da-slider" min="0" max="100" value="50">
+            <small>Low = Rigid | High = Excess Movement</small>
+        </div>
+
+        <h3>3. Treatment (Drug Application)</h3>
+        <div class="btn-group control-group">
+            <button onclick="applyDrug('none')" id="btn-drug-none" class="active">No Drug</button>
+            <button onclick="applyDrug('levodopa')" id="btn-drug-ldopa">L-DOPA (Agonist)</button>
+            <button onclick="applyDrug('antagonist')" id="btn-drug-antagonist">DA Antagonist</button>
+        </div>
+
+        <div class="scenario-box">
+            <h4>Current Clinical State:</h4>
+            <p id="clinical-text">Patient is healthy. Basal ganglia output is balanced, allowing for smooth, purposeful movement.</p>
+        </div>
+    </div>
+
+    <div class="visualization">
+        <svg id="connections">
+            <defs>
+                <marker id="arrow-exc" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#27ae60" />
+                </marker>
+                <marker id="arrow-inh" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <rect x="0" y="0" width="2" height="6" fill="#c0392b" /> </marker>
+                 <marker id="arrow-mod" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <circle cx="3" cy="3" r="3" fill="#2980b9" />
+                </marker>
+            </defs>
+            
+            <path id="p-cortex-striatum" d="M 320 60 L 320 150" class="arrow-excitatory" marker-end="url(#arrow-exc)"/>
+            
+            <path id="p-snc-striatum" d="M 120 180 L 260 180" class="arrow-modulatory" marker-end="url(#arrow-mod)"/>
+
+            <path id="p-direct" d="M 300 210 L 250 400" class="arrow-inhibitory" marker-end="url(#arrow-inh)"/>
+
+            <path id="p-striatum-gpe" d="M 340 210 L 480 280" class="arrow-inhibitory" marker-end="url(#arrow-inh)"/>
+            
+            <path id="p-gpe-stn" d="M 540 340 L 540 400" class="arrow-inhibitory" marker-end="url(#arrow-inh)"/>
+
+            <path id="p-stn-gpi" d="M 480 430 L 300 430" class="arrow-excitatory" marker-end="url(#arrow-exc)"/>
+
+            <path id="p-gpi-thalamus" d="M 260 460 L 320 520" class="arrow-inhibitory" marker-end="url(#arrow-inh)"/>
+            
+            <path id="p-thalamus-cortex" d="M 280 550 C 50 550 50 60 260 60" class="arrow-excitatory" style="opacity: 0.3" marker-end="url(#arrow-exc)"/>
+
+        </svg>
+
+        <div id="cortex" class="brain-box">Cortex<br>(Input)</div>
+        <div id="snc" class="brain-box">SNc<br>(Dopamine)</div>
+        <div id="striatum" class="brain-box">Striatum<br>(Input)</div>
+        
+        <div id="gpe" class="brain-box">GPe</div>
+        <div id="stn" class="brain-box">STN</div>
+        
+        <div id="gpi" class="brain-box">GPi / SNr<br>(Output)</div>
+        
+        <div id="thalamus" class="brain-box">Thalamus</div>
+
+        <div class="output-meter">
+            <div><strong>Thalamic Output (Motor Drive)</strong></div>
+            <div id="meter-fill">
+                <div id="meter-marker"></div>
+            </div>
+            <div class="status-text" id="motor-status">NORMAL</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // State Variables
+    let dopamineLevel = 50; // 0 to 100
+    let striatalCellHealth = 100; // 100 = healthy
+    let currentScenario = 'normal';
+
+    // DOM Elements
+    const daSlider = document.getElementById('da-slider');
+    const marker = document.getElementById('meter-marker');
+    const statusText = document.getElementById('motor-status');
+    const clinicalText = document.getElementById('clinical-text');
+    
+    // Path Elements (for visual thickness/opacity updates)
+    const pSncStriatum = document.getElementById('p-snc-striatum');
+    const pDirect = document.getElementById('p-direct'); // Striatum -> GPi
+    const pStriatumGpe = document.getElementById('p-striatum-gpe'); // Striatum -> GPe
+    const pGpeStn = document.getElementById('p-gpe-stn'); // GPe -> STN
+    const pStnGpi = document.getElementById('p-stn-gpi'); // STN -> GPi
+    const pGpiThalamus = document.getElementById('p-gpi-thalamus'); // GPi -> Thalamus
+
+    // Listeners
+    daSlider.addEventListener('input', (e) => {
+        dopamineLevel = parseInt(e.target.value);
+        updateCircuit();
+    });
+
+    function setScenario(scenario) {
+        currentScenario = scenario;
+        
+        // Reset active buttons
+        document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+        document.getElementById('btn-' + scenario).classList.add('active');
+        document.getElementById('btn-drug-none').classList.add('active'); // Reset drugs
+
+        if (scenario === 'normal') {
+            dopamineLevel = 50;
+            striatalCellHealth = 100;
+            clinicalText.innerText = "Patient is healthy. Basal ganglia output is balanced.";
+        } else if (scenario === 'parkinsons') {
+            dopamineLevel = 10;
+            striatalCellHealth = 100;
+            clinicalText.innerText = "Scenario: Patient has lost SNc neurons. Dopamine is critically low. Direct pathway is underactive; Indirect is overactive.";
+        } else if (scenario === 'huntingtons') {
+            dopamineLevel = 50;
+            striatalCellHealth = 0; // Represents loss of Enkephalin/D2 neurons specifically
+            clinicalText.innerText = "Scenario: Patient has degeneration of Striatal neurons (Indirect pathway). The 'brake' on movement is broken.";
+        }
+        
+        daSlider.value = dopamineLevel;
+        updateCircuit();
+    }
+
+    function applyDrug(drug) {
+        // Reset drug buttons
+        document.getElementById('btn-drug-none').classList.remove('active');
+        document.getElementById('btn-drug-ldopa').classList.remove('active');
+        document.getElementById('btn-drug-antagonist').classList.remove('active');
+        
+        if (drug === 'none') {
+            document.getElementById('btn-drug-none').classList.add('active');
+            // Revert to scenario baseline
+            if (currentScenario === 'parkinsons') dopamineLevel = 10;
+            else if (currentScenario === 'huntingtons') dopamineLevel = 50;
+            else dopamineLevel = 50;
+        } 
+        else if (drug === 'levodopa') {
+            document.getElementById('btn-drug-ldopa').classList.add('active');
+            dopamineLevel = Math.min(dopamineLevel + 40, 100);
+            clinicalText.innerText += " (L-DOPA administered: Dopamine levels increased.)";
+        } 
+        else if (drug === 'antagonist') {
+            document.getElementById('btn-drug-antagonist').classList.add('active');
+            dopamineLevel = Math.max(dopamineLevel - 30, 0);
+            clinicalText.innerText += " (Antagonist administered: Dopamine effects blocked.)";
+        }
+        
+        daSlider.value = dopamineLevel;
+        updateCircuit();
+    }
+
+    function updateCircuit() {
+        // 1. Calculate Dopamine Effect
+        // Low DA = High Indirect Activity, Low Direct Activity
+        // High DA = Low Indirect Activity, High Direct Activity
+        
+        // Normalize 0-100 to 0-1
+        let daFactor = dopamineLevel / 100; 
+
+        // 2. Direct Pathway (Promotes Movement)
+        // Mediated by D1 receptors (Excitatory to striatal output)
+        let directOutput = daFactor * 10; 
+        
+        // 3. Indirect Pathway (Inhibits Movement)
+        // Mediated by D2 receptors (Inhibitory to striatal output)
+        // If DA is high, Striatum -> GPe is INHIBITED less? No, DA inhibits the Indirect Striatal cells.
+        // So High DA = Low output from Striatum to GPe.
+        let indirectStriatalOutput = (1 - daFactor) * 10;
+        
+        // HUNTINGTONS OVERRIDE:
+        // Indirect pathway neurons die.
+        if (currentScenario === 'huntingtons') {
+            indirectStriatalOutput = 0; // Connection broken
+        }
+
+        // --- CHAIN REACTION ---
+        
+        // A. Striatum -> GPe (Inhibitory)
+        let gpeActivity = 10 - indirectStriatalOutput; // If striatum fires a lot, GPe is silent.
+        
+        // B. GPe -> STN (Inhibitory)
+        let stnActivity = 10 - gpeActivity; // If GPe is silent, STN goes wild (disinhibited).
+        
+        // C. STN -> GPi (Excitatory)
+        let indirectDriveToGPi = stnActivity; 
+        
+        // D. Striatum -> GPi (Direct, Inhibitory)
+        let directInhibitionOfGPi = directOutput;
+
+        // E. Net GPi Activity (The Brake on Thalamus)
+        // GPi is normally active (High). Direct path lowers it. Indirect path raises it.
+        let baseGpi = 5;
+        let netGpiActivity = baseGpi + indirectDriveToGPi - directInhibitionOfGPi;
+        
+        // Clamp values
+        if (netGpiActivity < 0) netGpiActivity = 0;
+        if (netGpiActivity > 10) netGpiActivity = 10;
+
+        // F. Thalamic Output (The Result)
+        // High GPi = Low Thalamus (Parkinsons). Low GPi = High Thalamus (Chorea).
+        let thalamicOutput = 10 - netGpiActivity;
+
+        // --- VISUAL UPDATES (Stroke Widths) ---
+        
+        // DA Line
+        pSncStriatum.style.strokeWidth = 1 + (daFactor * 8);
+        pSncStriatum.style.opacity = 0.3 + daFactor;
+
+        // Direct Path (Striatum -> GPi)
+        pDirect.style.strokeWidth = 1 + directOutput;
+        pDirect.style.opacity = 0.3 + (directOutput/10);
+
+        // Indirect Path
+        pStriatumGpe.style.strokeWidth = 1 + indirectStriatalOutput;
+        pGpeStn.style.strokeWidth = 1 + gpeActivity;
+        pStnGpi.style.strokeWidth = 1 + stnActivity;
+        
+        // Final Output
+        pGpiThalamus.style.strokeWidth = 1 + netGpiActivity;
+
+        // METER UPDATE
+        let percentage = (thalamicOutput / 10) * 100;
+        marker.style.left = percentage + '%';
+
+        if (percentage < 30) {
+            statusText.innerText = "HYPOKINETIC (Parkinsonism)";
+            statusText.style.color = "blue";
+        } else if (percentage > 70) {
+            statusText.innerText = "HYPERKINETIC (Chorea/Ballismus)";
+            statusText.style.color = "red";
+        } else {
+            statusText.innerText = "NORMAL MOVEMENT";
+            statusText.style.color = "green";
+        }
+    }
+
+    // Initialize
+    updateCircuit();
+
+</script>
+
+</body>
+</html>
